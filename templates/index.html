@@ -171,9 +171,16 @@ input::-webkit-inner-spin-button { display:none; }
 <div class="header">
   <h1>📈 量化<span>交易</span></h1>
   <div class="stock-search">
-    <input type="text" id="stockInput" placeholder="搜索股票代码或名称..." autocomplete="off">
+    <input type="text" id="stockInput" placeholder="搜索代码/名称..." autocomplete="off">
     <div class="search-dropdown" id="searchDropdown"></div>
   </div>
+  <select id="assetTypeSelect" onchange="onAssetTypeChange()"
+    style="background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;color:#fff;font-size:12px;">
+    <option value="all">全部类型</option>
+    <option value="stock" selected>🅰 A股</option>
+    <option value="etf">📦 ETF</option>
+    <option value="fund">💰 基金</option>
+  </select>
   <div style="display:flex;align-items:center;gap:12px;margin-left:auto;">
     <label style="font-size:12px;color:var(--text2);">初始资金:</label>
     <input type="number" id="capitalInput" value="100000" min="10000" max="10000000" step="10000"
@@ -280,6 +287,7 @@ let strategies = [];
 let activeStrategy = null;
 let activeTab = 'single';
 let currentSymbol = '600519';
+let currentAssetType = 'stock';
 let klineChart = null, equityChart = null, compareChart = null;
 let compareColorMap = {};
 
@@ -330,11 +338,14 @@ document.addEventListener('DOMContentLoaded', () => {
 async function searchStock(q) {
   try {
     const res = await fetch(`/api/search_stock?q=${encodeURIComponent(q)}`);
-    const data = await res.json();
+    let data = await res.json();
+    // 按类型筛选
+    const ft = document.getElementById('assetTypeSelect').value;
+    if (ft && ft !== 'all') data = data.filter(a => a.type === ft);
     const dropdown = document.getElementById('searchDropdown');
     dropdown.innerHTML = data.map(s =>
-      `<div class="item" onclick="selectStock('${s.symbol}','${s.name} (${s.symbol})')">
-        <span>${s.name}</span>
+      `<div class="item" onclick="selectStock('${s.symbol}','${s.name} (${s.symbol})','${s.type||'stock'}')">
+        <span>${s.name} <span style="color:var(--blue);font-size:10px;">${(s.type||'').toUpperCase()}</span></span>
         <span class="market">${s.symbol} · ${s.market}</span>
       </div>`
     ).join('');
@@ -342,10 +353,18 @@ async function searchStock(q) {
   } catch(e) {}
 }
 
-function selectStock(symbol, display) {
+function selectStock(symbol, display, assetType) {
   currentSymbol = symbol;
+  currentAssetType = assetType || 'stock';
   document.getElementById('stockInput').value = display;
+  document.getElementById('assetTypeSelect').value = assetType || 'stock';
   document.getElementById('searchDropdown').classList.remove('show');
+}
+
+function onAssetTypeChange() {
+  currentAssetType = document.getElementById('assetTypeSelect').value;
+  const q = document.getElementById('stockInput').value.trim();
+  if (q) searchStock(q);
 }
 
 // ─── 加载策略 ─────────────────────────────────────────
@@ -436,6 +455,7 @@ async function runBacktest() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         symbol: currentSymbol,
+        asset_type: currentAssetType,
         strategy: activeStrategy,
         params: params,
         start: document.getElementById('startDate').value,
@@ -471,6 +491,7 @@ async function runCompare() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         symbol: currentSymbol,
+        asset_type: currentAssetType,
         start: document.getElementById('startDate').value,
         end: document.getElementById('endDate').value,
         capital: capital,
